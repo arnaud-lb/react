@@ -6,6 +6,7 @@ use Guzzle\Http\Message\Request as GuzzleRequest;
 use React\HttpClient\Request;
 use React\Stream\Stream;
 use React\Tests\Socket\TestCase;
+use React\Promise\Util;
 
 class RequestTest extends TestCase
 {
@@ -43,10 +44,8 @@ class RequestTest extends TestCase
         $this->connectionManager
             ->expects($this->once())
             ->method('getConnection')
-            ->with($this->anything(), 'www.example.com', 80)
-            ->will($this->returnCallback(function ($cb) use ($stream) {
-                $cb($stream);
-            }))
+            ->with('www.example.com', 80)
+            ->will($this->returnValue(Util::resolve($stream)))
             ;
 
         $this->stream
@@ -155,10 +154,8 @@ class RequestTest extends TestCase
         $this->connectionManager
             ->expects($this->once())
             ->method('getConnection')
-            ->with($this->anything(), 'www.example.com', 80)
-            ->will($this->returnCallback(function ($cb) {
-                $cb(null);
-            }))
+            ->with('www.example.com', 80)
+            ->will($this->returnValue(Util::reject(null)));
             ;
 
         $handler = $this->createCallableMock();
@@ -202,10 +199,8 @@ class RequestTest extends TestCase
         $this->connectionManager
             ->expects($this->once())
             ->method('getConnection')
-            ->with($this->anything(), 'www.example.com', 80)
-            ->will($this->returnCallback(function ($cb) use ($stream) {
-                $cb($stream);
-            }))
+            ->with('www.example.com', 80)
+            ->will($this->returnValue(Util::resolve($stream)))
             ;
 
         $handler = $this->createCallableMock();
@@ -249,10 +244,8 @@ class RequestTest extends TestCase
         $this->connectionManager
             ->expects($this->once())
             ->method('getConnection')
-            ->with($this->anything(), 'www.example.com', 80)
-            ->will($this->returnCallback(function ($cb) use ($stream) {
-                $cb($stream);
-            }))
+            ->with('www.example.com', 80)
+            ->will($this->returnValue(Util::resolve($stream)))
             ;
 
         $handler = $this->createCallableMock();
@@ -297,10 +290,8 @@ class RequestTest extends TestCase
         $this->connectionManager
             ->expects($this->once())
             ->method('getConnection')
-            ->with($this->anything(), 'www.example.com', 80)
-            ->will($this->returnCallback(function ($cb) use ($stream) {
-                $cb($stream);
-            }))
+            ->with('www.example.com', 80)
+            ->will($this->returnValue(Util::resolve($stream)))
             ;
 
         $this->stream
@@ -342,10 +333,8 @@ class RequestTest extends TestCase
         $this->connectionManager
             ->expects($this->once())
             ->method('getConnection')
-            ->with($this->anything(), 'www.example.com', 80)
-            ->will($this->returnCallback(function ($cb) use ($stream) {
-                $cb($stream);
-            }))
+            ->with('www.example.com', 80)
+            ->will($this->returnValue(Util::resolve($stream)))
             ;
 
         $this->stream
@@ -398,10 +387,8 @@ class RequestTest extends TestCase
         $this->connectionManager
             ->expects($this->once())
             ->method('getConnection')
-            ->with($this->anything(), 'www.example.com', 80)
-            ->will($this->returnCallback(function ($cb) use ($stream) {
-                $cb($stream);
-            }))
+            ->with('www.example.com', 80)
+            ->will($this->returnValue(Util::resolve($stream)))
             ;
 
         $this->stream
@@ -473,10 +460,8 @@ class RequestTest extends TestCase
         $this->connectionManager
             ->expects($this->once())
             ->method('getConnection')
-            ->with($this->anything(), 'www.example.com', 80)
-            ->will($this->returnCallback(function ($cb) use ($stream) {
-                $cb($stream);
-            }))
+            ->with('www.example.com', 80)
+            ->will($this->returnValue(Util::resolve($stream)))
             ;
 
         $response = $this->response;
@@ -510,4 +495,3 @@ class RequestTest extends TestCase
         call_user_func($errorCallback, new \Exception('test'));
     }
 }
-

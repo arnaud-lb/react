@@ -15,11 +15,6 @@ use React\Stream\WritableStreamInterface;
 
 class Request extends EventEmitter implements WritableStreamInterface
 {
-    const STATE_INIT = 0;
-    const STATE_WRITING_HEAD = 1;
-    const STATE_HEAD_WRITTEN = 2;
-    const STATE_END = 3;
-
     private $request;
     private $loop;
     private $connectionManager;
@@ -27,43 +22,34 @@ class Request extends EventEmitter implements WritableStreamInterface
     private $buffer;
     private $responseFactory;
     private $response;
-    private $state = self::STATE_INIT;
+    private $writable;
+
+    private $writingHead;
 
     public function __construct(LoopInterface $loop, ConnectionManagerInterface $connectionManager, GuzzleRequest $request)
     {
         $this->loop = $loop;
         $this->connectionManager = $connectionManager;
         $this->request = $request;
+        $this->writable = true;
     }
 
     public function isWritable()
     {
-        return self::STATE_END > $this->state;
+        return $this->writable;
     }
 
     public function writeHead()
     {
-        if (self::STATE_WRITING_HEAD <= $this->state) {
-            throw new \LogicException('Headers already written');
+        if ($this->writingHead) {
+            return $this->writingHead;
         }
-
-        $this->state = self::STATE_WRITING_HEAD;
 
         $that = $this;
         $request = $this->request;
         $streamRef = &$this->stream;
-        $stateRef = &$this->state;
 
-        $this->connect(function ($stream, \Exception $error = null) use ($that, $request, &$streamRef, &$stateRef) {
-            if (!$stream) {
-                $that->closeError(new \RuntimeException(
-                    "Connection failed",
-                    0,
-                    $error
-                ));
-                return;
-            }
-
+        $this->writingHead = $this->connect()->then(function ($stream) use ($that, $request, &$streamRef) {
             $streamRef = $stream;
 
             $stream->on('drain', array($that, 'handleDrain'));
@@ -76,31 +62,27 @@ class Request extends EventEmitter implements WritableStreamInterface
 
             $stream->write($headers);
 
-            $stateRef = Request::STATE_HEAD_WRITTEN;
+            return $stream;
 
-            $that->emit('headers-written', array($that));
+        }, function ($error) use ($that) {
+            $that->closeError(new \RuntimeException(
+                "Connection failed",
+                0,
+                $error
+            ));
         });
+
+        return $this->writingHead;
     }
 
     public function write($data)
     {
-        if (!$this->isWritable()) {
-            return;
-        }
-
-        if (self::STATE_HEAD_WRITTEN <= $this->state) {
-            return $this->stream->write($data);
-        }
-
-        $this->on('headers-written', function ($that) use ($data) {
-            $that->write($data);
+        $this->writeHead()->then(function($stream) use ($data) {
+            if (null === $data) {
+                return;
+            }
+            $stream->write($data);
         });
-
-        if (self::STATE_WRITING_HEAD > $this->state) {
-            $this->writeHead();
-        }
-
-        return false;
     }
 
     public function end($data = null)
@@ -109,11 +91,7 @@ class Request extends EventEmitter implements WritableStreamInterface
             throw new \InvalidArgumentException('$data must be null or scalar');
         }
 
-        if (null !== $data) {
-            $this->write($data);
-        } else if (self::STATE_WRITING_HEAD > $this->state) {
-            $this->writeHead();
-        }
+        $this->write($data);
     }
 
     public function handleDrain()
@@ -173,7 +151,7 @@ class Request extends EventEmitter implements WritableStreamInterface
 
     public function closeError(\Exception $error)
     {
-        if (self::STATE_END <= $this->state) {
+        if (!$this->writable) {
             return;
         }
         $this->emit('error', array($error, $this));
@@ -182,11 +160,11 @@ class Request extends EventEmitter implements WritableStreamInterface
 
     public function close(\Exception $error = null)
     {
-        if (self::STATE_END <= $this->state) {
+        if (!$this->writable) {
             return;
         }
 
-        $this->state = self::STATE_END;
+        $this->writable = false;
 
         if ($this->stream) {
             $this->stream->close();
@@ -213,16 +191,11 @@ class Request extends EventEmitter implements WritableStreamInterface
         return array($response, $parsed['body']);
     }
 
-    protected function connect($callback)
+    protected function connect()
     {
         $host = $this->request->getHost();
         $port = $this->request->getPort();
-        $connectionManager = $this->connectionManager;
-        $that = $this;
-
-        $connectionManager->getConnection(function ($stream, $error = null) use ($that, $callback) {
-            call_user_func($callback, $stream, $error);
-        }, $host, $port);
+        return $this->connectionManager->getConnection($host, $port);
     }
 
     public function setResponseFactory($factory)

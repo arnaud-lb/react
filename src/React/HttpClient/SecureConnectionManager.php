@@ -4,14 +4,16 @@ namespace React\HttpClient;
 
 use React\EventLoop\LoopInterface;
 use React\Stream\Stream;
+use React\Promise\Deferred;
 
 class SecureConnectionManager extends ConnectionManager
 {
-    public function handleConnectedSocket($callback, $socket)
+    public function handleConnectedSocket($socket)
     {
+        $deferred = new Deferred;
         $loop = $this->loop;
 
-        $enableCrypto = function () use ($callback, $socket, $loop) {
+        $enableCrypto = function () use ($socket, $loop, $deferred) {
 
             $result = stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
 
@@ -19,13 +21,13 @@ class SecureConnectionManager extends ConnectionManager
                 // crypto was successfully enabled
                 $loop->removeWriteStream($socket);
                 $loop->removeReadStream($socket);
-                call_user_func($callback, new Stream($socket, $loop));
+                $deferred->resolve(new Stream($socket, $loop));
 
             } else if (false === $result) {
                 // an error occured
                 $loop->removeWriteStream($socket);
                 $loop->removeReadStream($socket);
-                call_user_func($callback, null);
+                $deferred->reject(new \RuntimeException("error occured while enabling crypto"));
 
             } else {
                 // need more data, will retry
@@ -36,6 +38,8 @@ class SecureConnectionManager extends ConnectionManager
         $this->loop->addReadStream($socket, $enableCrypto);
 
         $enableCrypto();
+
+        return $deferred->promise();
     }
 }
 

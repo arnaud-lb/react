@@ -5,6 +5,8 @@ namespace React\HttpClient;
 use React\EventLoop\LoopInterface;
 use React\Stream\Stream;
 use React\Dns\Resolver\Resolver;
+use React\Promise\Deferred;
+use React\Promise\Util;
 
 class ConnectionManager implements ConnectionManagerInterface
 {
@@ -17,34 +19,33 @@ class ConnectionManager implements ConnectionManagerInterface
         $this->resolver = $resolver;
     }
 
-    public function getConnection($callback, $host, $port)
+    public function getConnection($host, $port)
     {
         $that = $this;
-        $this->resolve(function ($address, $error = null) use ($that, $callback, $host, $port) {
-            if ($error) {
-                call_user_func($callback, null, new \RuntimeException(
+
+        return $this->resolve($host)
+            ->then(function ($address) use ($that, $port) {
+                return $that->getConnectionForAddress($address, $port);
+            }, function ($error) use ($host) {
+                throw new \RuntimeException(
                     sprintf("failed to resolve %s", $host),
                     0,
                     $error
-                ));
-                return;
-            }
-            $that->getConnectionForAddress($callback, $address, $port);
-        }, $host);
+                );
+            });
     }
 
-    public function getConnectionForAddress($callback, $address, $port)
+    public function getConnectionForAddress($address, $port)
     {
         $url = $this->getSocketUrl($address, $port);
 
         $socket = stream_socket_client($url, $errno, $errstr, ini_get("default_socket_timeout"), STREAM_CLIENT_CONNECT | STREAM_CLIENT_ASYNC_CONNECT);
 
         if (!$socket) {
-            call_user_func($callback, null, new \RuntimeException(
-                sprintf("connection to %s:%d failed: %s", $addresss, $port, $errstr),
+            return Util::reject(new \RuntimeException(
+                sprintf("connection to %s:%d failed: %s", $address, $port, $errstr),
                 $errno
             ));
-            return;
         }
 
         stream_set_blocking($socket, 0);
@@ -53,18 +54,21 @@ class ConnectionManager implements ConnectionManagerInterface
 
         $loop = $this->loop;
         $that = $this;
+        $deferred = new Deferred;
 
-        $this->loop->addWriteStream($socket, function () use ($that, $callback, $socket, $loop) {
+        $this->loop->addWriteStream($socket, function () use ($that, $deferred, $socket, $loop) {
 
             $loop->removeWriteStream($socket);
 
-            $that->handleConnectedSocket($callback, $socket);
+            $that->handleConnectedSocket($socket)->then(array($deferred, 'resolve'), array($deferred, 'reject'));
         });
+
+        return $deferred->promise();
     }
 
-    public function handleConnectedSocket($callback, $socket)
+    public function handleConnectedSocket($socket)
     {
-        call_user_func($callback, new Stream($socket, $this->loop));
+        return Util::resolve(new Stream($socket, $this->loop));
     }
 
     protected function getSocketUrl($host, $port)
@@ -72,18 +76,16 @@ class ConnectionManager implements ConnectionManagerInterface
         return sprintf('tcp://%s:%s', $host, $port);
     }
 
-    protected function resolve($callback, $host)
+    protected function resolve($host)
     {
         if (false !== filter_var($host, FILTER_VALIDATE_IP)) {
-            call_user_func($callback, $host);
-            return;
+            return Util::resolve($host);
         }
 
-        $this->resolver->resolve($host, function ($address) use ($callback) {
-            call_user_func($callback, $address);
-        }, function ($error) use ($callback) {
-            call_user_func($callback, null, $error);
-        });
+        $deferred = new Deferred;
+        $this->resolver->resolve($host, array($deferred, 'resolve'), array($deferred, 'reject'));
+
+        return $deferred->promise();
     }
 }
 

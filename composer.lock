@@ -1,5 +1,5 @@
 {
-    "hash": "01246d4d155dda6b1e580baa656828c6",
+    "hash": "6b4327525a910266b5c5ad376e57eb7f",
     "packages": [
         {
             "name": "evenement/evenement",
@@ -20,7 +20,7 @@
             },
             "time": "2012-05-30 08:01:08",
             "type": "library",
-            "installation-source": "dist",
+            "installation-source": "source",
             "autoload": {
                 "psr-0": {
                     "Evenement": "src"
@@ -219,14 +219,12 @@
             "homepage": "http://symfony.com"
         }
     ],
-    "packages-dev": [
-
-    ],
+    "packages-dev": null,
     "aliases": [
 
     ],
     "minimum-stability": "stable",
-    "stability-flags": [
-
-    ]
+    "stability-flags": {
+        "react/promise": 20
+    }
 }
